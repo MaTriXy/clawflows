@@ -71,7 +71,7 @@ cmd_help() {
   printf "  ${CMD}create --from-json${R}   Create from JSON (for agents)\n"
 
   printf "\n${H}▶️  Running${R}\n"
-  printf "  ${CMD}run ${M}<name>${R}           Run a workflow now (invokes your agent)\n"
+  printf "  ${CMD}run ${M}<name>${R} [--input <text>]  Run a workflow now (invokes your agent)\n"
   printf "  ${CMD}logs ${M}[name] [date]${R}   Show recent run logs\n"
 
   printf "\n${H}🔧 Managing${R}\n"
@@ -846,12 +846,11 @@ _build_block() {
   lines+=("$START_MARKER")
   lines+=("## ClawFlows")
   lines+=("")
-  lines+=("Workflows from \`$CLAWFLOWS_DIR/\`. When the user asks you to do something that matches an enabled workflow, read its WORKFLOW.md and follow the steps.")
+  lines+=("Workflows from \`$CLAWFLOWS_DIR/\`. When the user asks you to do something that matches an enabled workflow, run it with \`clawflows run\`.")
   lines+=("")
   lines+=("### Running a Workflow")
-  lines+=("1. Read the WORKFLOW.md file listed next to the workflow below")
-  lines+=("2. Follow the steps in the file exactly")
-  lines+=("3. If the workflow isn't enabled yet, run \`clawflows enable <name>\` first")
+  lines+=("1. Match the user's request to a workflow in the Enabled Workflows list below")
+  lines+=("2. Run \`clawflows run <name> --input \"<the user's message>\"\` — always pass the user's original message text as --input so the workflow has context")
   lines+=("")
   lines+=("### CLI Commands")
   lines+=("- \`clawflows dashboard\` — open a visual workflow browser in the user's web browser (runs in background, survives terminal close)")
@@ -997,7 +996,7 @@ _build_block() {
 
   if $has_enabled; then
     lines+=("### Enabled Workflows")
-    lines+=("When the user asks for any of these, read the WORKFLOW.md file and follow it.")
+    lines+=("When the user asks for any of these, run \`clawflows run <name> --input \"<user's message>\"\`.")
     for entry in "${entries[@]}"; do
       lines+=("$entry")
     done
@@ -1616,6 +1615,14 @@ cmd_import() {
 
 cmd_run() {
   local name="$1"
+  shift
+  local input=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --input) shift; input="$1"; shift ;;
+      *) shift ;;
+    esac
+  done
   validate_workflow_name "$name"
   local wf_file
 
@@ -1654,7 +1661,14 @@ cmd_run() {
     echo ""
     local cf_agent
     cf_agent="${CLAWFLOWS_OPENCLAW_AGENT:-main}"
-    "$oc" agent --agent "$cf_agent" -m "Run the $name workflow by following $wf_file" | tee "$run_file"
+    local prompt="Run the $name workflow by following $wf_file"
+    if [ -n "$input" ]; then
+      prompt="$prompt
+
+The user's message that triggered this workflow:
+$input"
+    fi
+    "$oc" agent --agent "$cf_agent" -m "$prompt" | tee "$run_file"
   else
     echo ""
     echo "  ✓ Workflow ready: $name"
@@ -2057,7 +2071,7 @@ cmd_dashboard() {
 case "$1" in
   list)      cmd_list "${2:-all}" ;;
   create)    cmd_create "${2:-}" "${3:-}" ;;
-  run)       [ $# -ge 2 ] || die "usage: clawflows run <name>"; cmd_run "$2" ;;
+  run)       [ $# -ge 2 ] || die "usage: clawflows run <name> [--input <text>]"; shift; cmd_run "$@" ;;
   logs)      cmd_logs "${2:-}" "${3:-}" ;;
   enable)    [ $# -ge 2 ] || die "usage: clawflows enable <name>"; cmd_enable "$2" ;;
   disable)   [ $# -ge 2 ] || die "usage: clawflows disable <name>"; cmd_disable "$2" ;;
